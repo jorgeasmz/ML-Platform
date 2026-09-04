@@ -1,0 +1,49 @@
+# Which registered model this release serves. It names the release's resources and
+# labels them, so a cluster holding several models says which is which.
+model: ""
+
+image:
+  repository: ""
+  tag: latest
+  # Never, so a cluster cannot quietly serve a different build than the one loaded
+  # into it. A tag is not an identity; the image loaded under it is.
+  pullPolicy: IfNotPresent
+
+replicas: 1
+port: 8000
+
+service:
+  # ClusterIP under kind, where a test port-forwards. LoadBalancer on a cluster
+  # with one, which is what puts a public address in front of it.
+  type: ClusterIP
+
+# The service is known to run within 512 MB, which is what the free tier it is
+# deployed on allows. The request is what the scheduler reserves and the limit is
+# what the kernel enforces.
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    memory: 512Mi
+
+# The root endpoint answers 200 even when the model failed to load, deliberately,
+# so a bad artifact does not turn into a restart loop. Liveness therefore asks
+# whether the process is alive and readiness asks whether it can serve, which are
+# different questions and are asked differently.
+probes:
+  livenessPath: /
+  readinessCommand:
+    - python
+    - -c
+    - |
+      import json, urllib.request
+      assert json.load(urllib.request.urlopen("http://localhost:8000/"))["model_loaded"]
+
+autoscaling:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 70
+
+env: []

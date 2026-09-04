@@ -1,0 +1,115 @@
+name: Cluster
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "deploy/chart/**"
+      - ".github/workflows/cluster.yml"
+  # The image is built from another repository, which changes without touching
+  # this one, so the chart is exercised against it on a schedule as well.
+  schedule:
+    - cron: "40 7 * * 1"
+  workflow_dispatch:
+
+jobs:
+  kind:
+    runs-on: ubuntu-latest
+
+    env:
+      IMAGE: credit-risk-api:local
+      RELEASE: credit-risk
+
+    steps:
+      - uses: actions/checkout@v5
+
+      # The workload is the service that serves a promoted model. Testing the
+      # chart against a stand-in would prove the templates render, which the lint
+      # already does, and nothing about whether the thing starts.
+      - name: Check out the service this chart deploys
+        uses: actions/checkout@v5
+        with:
+          repository: jorgeasmz/Credit-Risk-Assessment
+          path: service
+
+      - name: Lint the chart
+        run: helm lint deploy/chart -f deploy/chart/values-credit-risk.yaml
+
+      # Its Dockerfile downloads the artifact commit the registry pinned, so the
+      # image carries the version in production rather than one fitted here.
+      - name: Build the image
+        run: docker build -t "$IMAGE" service
+
+      - uses: helm/kind-action@v1
+        with:
+          cluster_name: model-service
+          wait: 120s
+
+      - name: Load the image into the cluster
+        run: kind load docker-image "$IMAGE" --name model-service
+
+      - name: Install metrics-server
+        run: |
+          kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/download/v0.7.2/components.yaml
+          # kind's kubelet serves its metrics endpoint with a self-signed certificate.
+          kubectl patch deployment metrics-server -n kube-system --type=json \
+            -p='[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--kubelet-insecure-tls"}]'
+          kubectl rollout status deployment/metrics-server -n kube-system --timeout=180s
+
+      - name: Install the chart
+        run: |
+          helm install "$RELEASE" deploy/chart \
+            -f deploy/chart/values-credit-risk.yaml --wait --timeout 300s
+
+      # Fails the job on a pod that crash-loops or a readiness probe that never
+      # passes, which is what a rendered manifest cannot tell you.
+      - name: Wait for the rollout
+        run: kubectl rollout status "deployment/$RELEASE" --timeout=300s
+
+      # Through the Service rather than into the pod, so what is exercised is the
+      # routing as well as the container.
+      - name: The service answers, and says which model it serves
+        run: |
+          kubectl port-forward "service/$RELEASE" 8080:80 &
+          forward=$!
+          trap 'kill $forward 2>/dev/null || true' EXIT
+
+          for _ in $(seq 1 20); do
+            curl -sf http://127.0.0.1:8080/ -o response.json && break
+            sleep 2
+          done
+
+          cat response.json
+          python - <<'PY'
+          import json
+          body = json.loads(open("response.json").read())
+          assert body["model_loaded"] is True, body
+          assert body["model_version"], "the service reports no model version"
+          print(f"serving model version {body['model_version']}")
+          PY
+
+      - name: The autoscaler reads the workload
+        run: |
+          for _ in $(seq 1 30); do
+            used=$(kubectl get hpa "$RELEASE" \
+              -o jsonpath='{.status.currentMetrics[0].resource.current.averageUtilization}' 2>/dev/null || true)
+            [ -n "$used" ] && break
+            sleep 10
+          done
+          kubectl get hpa "$RELEASE"
+          if [ -z "$used" ]; then
+            echo "The autoscaler never read a utilisation from the workload." >&2
+            exit 1
+          fi
+
+      - name: Report what ran
+        if: always()
+        run: |
+          kubectl get deployment,service,hpa,pods -l "app.kubernetes.io/name=$RELEASE" \
+            >> "$GITHUB_STEP_SUMMARY" || true
+
+      - name: Describe a failure
+        if: failure()
+        run: |
+          kubectl describe pods -l "app.kubernetes.io/name=$RELEASE" || true
+          kubectl logs -l "app.kubernetes.io/name=$RELEASE" --tail=100 || true

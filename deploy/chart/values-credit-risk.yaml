@@ -1,0 +1,11 @@
+# The credit risk service, as deployed. The image is built from that project's
+# Dockerfile, which downloads the artifact commit the registry pinned.
+model: credit-risk
+image:
+  repository: credit-risk-api
+  tag: local
+env:
+  # Its own decision log. SQLite is the default and is what a cluster without a
+  # database gets; a real deployment points this at PostgreSQL.
+  - name: API_KEY
+    value: "not-a-secret-in-this-cluster"
