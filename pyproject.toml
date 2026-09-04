@@ -3,16 +3,19 @@ name = "ml-platform"
 version = "0.1.0"
 description = "Registry, promotion gate and serving for the models the portfolio already trains"
 requires-python = ">=3.12"
+# The client half of MLflow. A project that trains a model installs this to reach
+# the registry and run the gate, and pulling the server with it would drag its own
+# pins into the environment whose library versions the record is supposed to
+# capture.
 dependencies = [
-    "mlflow==3.16.0",
+    "mlflow-skinny==3.16.0",
     "huggingface-hub==1.30.0",
-    "psycopg[binary]==3.3.4",
 ]
 
-# Only the tracking server needs these. A client that reads the registry or runs the
-# gate does not, and its install stays smaller without them.
+# The tracking server, its basic auth, and the driver it reaches PostgreSQL with.
+# Nothing else needs any of it: a client speaks HTTP to the server.
 [project.optional-dependencies]
-server = ["mlflow[auth]==3.16.0"]
+server = ["mlflow[auth]==3.16.0", "psycopg[binary]==3.3.4"]
 
 # MLflow discovers artifact backends by URI scheme through this group, which is why
 # the package is installed rather than merely importable. Without the install, an
