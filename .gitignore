@@ -1,0 +1,24 @@
+# Python
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+
+# Environment
+.env
+
+# MLflow, when a run is made against a local store
+mlruns/
+mlartifacts/
+
+# Model artifacts are resolved from the registry, never committed
+artifacts/
+*.joblib
+*.onnx
+
+# Kubernetes
+kubeconfig

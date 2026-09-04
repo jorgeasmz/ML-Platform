@@ -1,0 +1,23 @@
+[project]
+name = "ml-platform"
+version = "0.1.0"
+description = "Registry, promotion gate and serving for the models the portfolio already trains"
+requires-python = ">=3.12"
+dependencies = [
+    "mlflow==3.16.0",
+    "huggingface-hub==1.30.0",
+    "psycopg[binary]==3.3.4",
+]
+
+# MLflow discovers artifact backends by URI scheme through this group, which is why
+# the package is installed rather than merely importable. Without the install, an
+# hf:// artifact root resolves to nothing and MLflow reports an unsupported scheme.
+[project.entry-points."mlflow.artifact_repository"]
+hf = "registry.hf_artifacts:HuggingFaceArtifactRepository"
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["registry"]
