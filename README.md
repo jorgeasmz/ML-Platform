@@ -125,6 +125,50 @@ The candidate is registered whichever way the gate decides. A refused version st
 in the registry carrying the score that refused it, which is the record of what was
 tried.
 
+## Deployment
+
+| Component | Host | |
+|---|---|---|
+| Tracking server and registry | Render | private, see below |
+| Runs, versions and auth users | Neon, PostgreSQL | |
+| Artifacts | Hugging Face | one model repository per model |
+
+No model binary crosses the tracking server. It runs with `--no-serve-artifacts`,
+so a client resolves an `hf://` source and fetches from Hugging Face directly, and
+the instance carries metadata only.
+
+### Access
+
+The server requires a credential on every route but `/health`, which is exempt and
+is what the platform's own health check reaches.
+
+It is not published with a browse credential. MLflow's basic auth gates reading and
+editing a resource, but creation is ungated: with workspaces disabled, which is the
+default, `_can_create_in_workspace` returns true for any authenticated user
+whatever their `default_permission`. A published read-only credential would
+therefore also be a credential that can create registered models.
+
+MLflow reads its auth configuration with `configparser` and expands no environment
+variables in it, so `deploy/start.sh` writes the file at start-up from the
+environment rather than committing an administrator password to the repository.
+
+### Sizing
+
+| | |
+|---|---:|
+| Resident, one worker, idle | 256 MB |
+| Resident after 80 requests | 256 MB |
+| Summed PSS across the process tree | 195 MB |
+| Plan allows | 512 MB |
+
+Memory is flat under load, since the server holds metadata and streams nothing.
+One worker is what ships: two would put the pair close enough to the limit that
+whether the instance survives is decided by chance rather than by measurement.
+
+The free plan sleeps an idle instance, so the first request after a quiet period
+pays the start-up. Nothing on the critical path of a deployment depends on the
+server answering quickly.
+
 ## Development
 
 ```bash
@@ -155,6 +199,8 @@ ML-Platform/
 │   ├── gate.py           # Whether a candidate replaces the model in production
 │   ├── store.py          # Model versions, their evidence, and the production alias
 │   └── promote.py        # The command a training pipeline calls, and its exit status
+├── deploy/start.sh       # Writes the auth configuration, then runs the server
+├── render.yaml           # The tracking server, on the free plan
 ├── tests/                # pytest suite, offline
 └── pyproject.toml        # The entry point MLflow discovers the backend through
 ```
