@@ -229,6 +229,45 @@ The free plan sleeps an idle instance, so the first request after a quiet period
 pays the start-up. Nothing on the critical path of a deployment depends on the
 server answering quickly.
 
+## Serving on Kubernetes
+
+`deploy/chart` is one chart parameterised by model and image rather than a set of
+manifests per service, so a second model is a values file rather than a copy.
+
+The two probes ask different questions, because the service answers them
+differently on purpose. Its root endpoint returns 200 even when the model failed
+to load, which is what keeps a bad artifact from becoming a restart loop, so
+liveness reads the status and readiness reads the body and asserts `model_loaded`.
+That is the same check the service's own compose file makes, stated once more
+where Kubernetes can see it.
+
+Requests and limits are set at 256Mi and 512Mi, which is the bound the service is
+already known to run within on the free tier it is deployed to.
+
+### What the cluster job proves
+
+`helm lint` and a rendered template establish that the YAML is valid, which a
+manifest that crash-loops also is. So the workflow builds the real image from the
+service's own Dockerfile, loads it into a `kind` cluster, installs the chart, and
+then asks the cluster questions that a rendering cannot answer.
+
+| Question | How it is answered |
+|---|---|
+| Does the pod start | `kubectl rollout status`, which fails on a crash loop |
+| Does readiness pass | The rollout does not complete until it does |
+| Does the Service route | A port-forward and a request through it |
+| Which model is being served | The response carries the artifact hash |
+| Can the autoscaler read the workload | metrics-server is installed and the HPA is polled for a utilisation |
+
+The last two are the ones worth having. Measured on a run: the service reports
+`model_version` `4d17fdeb3b1d`, the same artifact hash the registry recorded when
+the gate scored it, and the autoscaler reports `cpu: 29%/70%` rather than
+`<unknown>`, which is the difference between an autoscaler that exists and one
+that reads its target.
+
+No cluster serves public traffic yet. The public demo runs on Render, and the
+manifests are applied and exercised on every change to them.
+
 ## Development
 
 ```bash
@@ -262,6 +301,7 @@ ML-Platform/
 │   ├── resolve.py        # The production artifact on local disk, or why it is not
 │   └── report.py         # The published page, built from the registry
 ├── deploy/start.sh       # Writes the auth configuration, then runs the server
+├── deploy/chart/         # One chart, parameterised by model and image
 ├── render.yaml           # The tracking server, on the free plan
 ├── tests/                # pytest suite, offline
 └── pyproject.toml        # The entry point MLflow discovers the backend through
