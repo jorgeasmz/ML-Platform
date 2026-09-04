@@ -1,4 +1,4 @@
-from registry.gate import Measurement, decide, digest
+from registry.gate import Measurement, decide, digest, digest_bytes
 from registry.models import RegisteredModel
 
 DATA = "0" * 16
@@ -120,3 +120,11 @@ def test_the_same_bytes_digest_the_same_and_different_bytes_do_not(tmp_path):
     assert digest(first) == digest(second)
     assert digest(first) != digest(changed)
     assert len(digest(first)) == 16
+
+
+def test_a_file_digests_as_its_bytes(tmp_path):
+    """One algorithm, so a project digesting a frame in memory agrees with a file."""
+    path = tmp_path / "holdout.csv"
+    path.write_bytes(b"a,b\n1,2\n")
+
+    assert digest(path) == digest_bytes(b"a,b\n1,2\n")

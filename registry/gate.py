@@ -46,9 +46,18 @@ class Decision:
         return f"{verdict}: {self.reason}"
 
 
+def digest_bytes(data: bytes) -> str:
+    """Identifies the held-out data a score was measured on.
+
+    Every project that reports a score digests its held-out data with this, so two
+    runs claiming the same data agree by construction rather than by convention.
+    """
+    return hashlib.sha256(data).hexdigest()[:16]
+
+
 def digest(path: str | Path) -> str:
-    """Identifies the held-out data a score was measured on."""
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()[:16]
+    """The same, for held-out data that is a file."""
+    return digest_bytes(Path(path).read_bytes())
 
 
 def decide(
