@@ -16,6 +16,7 @@ Usage: python -m registry.resolve --model credit-risk --into ./model
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -26,6 +27,7 @@ from mlflow.store.artifact.artifact_repository_registry import get_artifact_repo
 
 from registry.environment import Difference, assert_loadable
 from registry.gate import Measurement
+from registry.hf_artifacts import parse_uri
 from registry.models import BY_NAME, RegisteredModel, get
 from registry.store import PRODUCTION, environment_of, measurement_of
 
@@ -55,6 +57,41 @@ def production_version(client: MlflowClient, model: RegisteredModel):
             f"No version of '{model.name}' carries the {PRODUCTION} alias. "
             "A candidate has to pass the gate before anything can serve it."
         ) from error
+
+
+def describe(model_name: str, client: MlflowClient | None = None) -> dict:
+    """The production version as a pointer, without fetching anything.
+
+    A serving image needs the bytes but not the registry: it has no business
+    holding a credential to it. This is what a build reads instead, and every
+    field in it is public, so the image downloads over plain HTTPS.
+    """
+    model = get(model_name)
+    client = client or MlflowClient()
+
+    version = production_version(client, model)
+    _, _, revision = parse_uri(version.source)
+    measured = measurement_of(version)
+
+    pointer = {
+        "model": model.name,
+        "version": version.version,
+        "repo": model.repo,
+        "revision": revision,
+        "artifact_file": model.artifact_file,
+        "environment": environment_of(client, model, version.version),
+    }
+    if measured:
+        pointer |= {
+            "metric": measured.metric,
+            "value": measured.value,
+            "dataset": measured.dataset,
+        }
+    if model.artifact_file and revision:
+        pointer["url"] = (
+            f"https://huggingface.co/{model.repo}/resolve/{revision}/{model.artifact_file}"
+        )
+    return pointer
 
 
 def fetch(source: str, artifact_file: str | None, destination: Path) -> Path:
@@ -96,8 +133,19 @@ def resolve(
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", required=True, choices=sorted(BY_NAME))
-    parser.add_argument("--into", required=True, help="directory to download into")
+    parser.add_argument("--into", help="directory to download into")
+    parser.add_argument(
+        "--describe", action="store_true",
+        help="write the pointer as JSON and download nothing",
+    )
     arguments = parser.parse_args(argv)
+
+    if arguments.describe:
+        print(json.dumps(describe(arguments.model), indent=2, sort_keys=True))
+        return 0
+
+    if not arguments.into:
+        parser.error("--into is required unless --describe is given")
 
     resolved = resolve(arguments.model, arguments.into)
 

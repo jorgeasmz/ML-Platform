@@ -186,3 +186,73 @@ def test_the_command_prints_the_version_and_its_measurement(
 def test_the_command_refuses_a_model_outside_the_catalogue(model):
     with pytest.raises(SystemExit):
         resolve_module.main(["--model", "no-such-model", "--into", "/tmp/unused"])
+
+
+def test_a_pointer_carries_only_what_a_build_may_know(
+    client, model, downloads, monkeypatch, tmp_path
+):
+    """A serving image needs the bytes, not a credential to the registry."""
+    uri = f"sqlite:///{tmp_path / 'registry.db'}"
+    monkeypatch.setenv("MLFLOW_TRACKING_URI", uri)
+    monkeypatch.setenv("MLFLOW_REGISTRY_URI", uri)
+    version = registered(client, model)
+    promote(client, model, version)
+
+    pointer = resolve_module.describe(model.name, client)
+
+    assert pointer["repo"] == "owner/repo"
+    assert pointer["revision"] == REVISION
+    assert pointer["artifact_file"] == "model.joblib"
+    assert pointer["version"] == version
+    assert pointer["metric"] == "total_cost"
+    assert pointer["value"] == 340
+    assert pointer["environment"] == WRITTEN_UNDER
+    assert pointer["url"] == (
+        f"https://huggingface.co/owner/repo/resolve/{REVISION}/model.joblib"
+    )
+
+
+def test_describing_downloads_nothing(client, model, downloads, tmp_path):
+    promote(client, model, registered(client, model))
+
+    resolve_module.describe(model.name, client)
+
+    assert downloads == []
+
+
+def test_a_pointer_without_a_named_file_carries_no_url(
+    client, model, downloads, monkeypatch, tmp_path
+):
+    """A repository of weights is not one URL, so none is offered."""
+    monkeypatch.setattr(resolve_module, "get", lambda name: RegisteredModel(
+        name=model.name, repo=model.repo, trained_by=model.trained_by,
+        metric=model.metric, higher_is_better=False, packages=model.packages,
+    ))
+    promote(client, model, registered(client, model))
+
+    pointer = resolve_module.describe(model.name, client)
+
+    assert "url" not in pointer
+    assert pointer["artifact_file"] is None
+
+
+def test_the_command_writes_the_pointer_as_json(
+    client, model, downloads, monkeypatch, tmp_path, capsys
+):
+    import json
+
+    uri = f"sqlite:///{tmp_path / 'registry.db'}"
+    monkeypatch.setenv("MLFLOW_TRACKING_URI", uri)
+    monkeypatch.setenv("MLFLOW_REGISTRY_URI", uri)
+    promote(client, model, registered(client, model))
+
+    exit_code = resolve_module.main(["--model", model.name, "--describe"])
+
+    assert exit_code == 0
+    assert json.loads(capsys.readouterr().out)["revision"] == REVISION
+    assert downloads == []
+
+
+def test_downloading_without_a_destination_is_refused(model):
+    with pytest.raises(SystemExit):
+        resolve_module.main(["--model", model.name])
