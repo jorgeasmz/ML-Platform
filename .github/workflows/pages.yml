@@ -1,0 +1,57 @@
+name: Registry page
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "registry/**"
+      - ".github/workflows/pages.yml"
+  # Promotions happen in the repositories that train the models, not in this one,
+  # so a page rebuilt only on pushes here would report yesterday's production.
+  schedule:
+    - cron: "25 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+
+    env:
+      MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
+      MLFLOW_TRACKING_USERNAME: ${{ secrets.MLFLOW_TRACKING_USERNAME }}
+      MLFLOW_TRACKING_PASSWORD: ${{ secrets.MLFLOW_TRACKING_PASSWORD }}
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - run: pip install -e .
+
+      # The credential stays here. What reaches Pages is one file of text with
+      # nothing in it that can be written to.
+      - name: Build
+        run: python -m registry.report --into site
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4

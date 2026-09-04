@@ -178,6 +178,16 @@ MLflow reads its auth configuration with `configparser` and expands no environme
 variables in it, so `deploy/start.sh` writes the file at start-up from the
 environment rather than committing an administrator password to the repository.
 
+What is published instead is a static page built from the registry by a workflow
+that holds the credential. It carries which version of each model is serving, the
+measurement that promoted it, the commit its artifact lives at, and the library
+versions it was written under, in one self-contained file with no stylesheet, no
+script and nothing that can be written to.
+
+The page rebuilds daily as well as on a change to this repository, because
+promotions happen in the repositories that train the models rather than in this
+one, and a page rebuilt only on pushes here would report yesterday's production.
+
 ### Connection
 
 `MLFLOW_BACKEND_URI` names the driver and points at the direct endpoint:
@@ -225,7 +235,7 @@ server answering quickly.
 python -m venv venv && source venv/bin/activate
 pip install -r requirements-dev.txt   # installs this package, which registers the scheme
 
-pytest              # 80 tests, offline
+pytest              # 90 tests, offline
 ruff check .
 ```
 
@@ -249,7 +259,8 @@ ML-Platform/
 │   ├── gate.py           # Whether a candidate replaces the model in production
 │   ├── store.py          # Model versions, their evidence, and the production alias
 │   ├── promote.py        # The command a training pipeline calls, and its exit status
-│   └── resolve.py        # The production artifact on local disk, or why it is not
+│   ├── resolve.py        # The production artifact on local disk, or why it is not
+│   └── report.py         # The published page, built from the registry
 ├── deploy/start.sh       # Writes the auth configuration, then runs the server
 ├── render.yaml           # The tracking server, on the free plan
 ├── tests/                # pytest suite, offline
