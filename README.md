@@ -125,6 +125,30 @@ The candidate is registered whichever way the gate decides. A refused version st
 in the registry carrying the score that refused it, which is the record of what was
 tried.
 
+## Resolving what to serve
+
+A service that builds its own model serves whatever the last build produced, which
+nothing measured and nothing compared. The resolver answers the opposite question:
+which version does the registry say is in production, and may this process read it.
+
+```bash
+python -m registry.resolve --model credit-risk --into ./model
+```
+
+It reads the version behind the `production` alias, checks the recorded library
+versions against the ones present, and only then downloads. The order matters: a
+service that fetches the artifact and discovers afterwards that it cannot read it
+has already paid for the fetch.
+
+The download goes through MLflow's artifact repository, which resolves the
+version's `hf://` source through the backend registered here. The registration path
+and the serving path reach the same bytes through the same code, and the source is
+pinned to the commit that was scored rather than to a branch that has moved since.
+
+Nothing in production is an error rather than an empty result. A service has no
+model to fall back to, and a candidate has to pass the gate before anything can
+serve it.
+
 ## Deployment
 
 | Component | Host | |
@@ -201,7 +225,7 @@ server answering quickly.
 python -m venv venv && source venv/bin/activate
 pip install -r requirements-dev.txt   # installs this package, which registers the scheme
 
-pytest              # 69 tests, offline
+pytest              # 80 tests, offline
 ruff check .
 ```
 
@@ -224,7 +248,8 @@ ML-Platform/
 │   ├── models.py         # The catalogue, and the terms of a promotion
 │   ├── gate.py           # Whether a candidate replaces the model in production
 │   ├── store.py          # Model versions, their evidence, and the production alias
-│   └── promote.py        # The command a training pipeline calls, and its exit status
+│   ├── promote.py        # The command a training pipeline calls, and its exit status
+│   └── resolve.py        # The production artifact on local disk, or why it is not
 ├── deploy/start.sh       # Writes the auth configuration, then runs the server
 ├── render.yaml           # The tracking server, on the free plan
 ├── tests/                # pytest suite, offline

@@ -40,7 +40,7 @@ def ensure_model(client: MlflowClient, model: RegisteredModel) -> None:
         )
 
 
-def _measurement(version) -> Measurement | None:
+def measurement_of(version) -> Measurement | None:
     """Reads a measurement off a version's tags, or None when it carries none."""
     tags = version.tags
     if METRIC not in tags or VALUE not in tags:
@@ -60,7 +60,7 @@ def production(client: MlflowClient, model: RegisteredModel) -> Measurement | No
         version = client.get_model_version_by_alias(model.name, PRODUCTION)
     except (MlflowException, RestException):
         return None
-    return _measurement(version)
+    return measurement_of(version)
 
 
 def record(

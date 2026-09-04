@@ -29,6 +29,9 @@ class RegisteredModel:
     # An absolute bar a candidate must clear regardless of the incumbent. None means
     # the incumbent is the only bar.
     floor: float | None = None
+    # The file inside the repository that is the model. None means the whole
+    # repository is, which is what a set of weights split across files needs.
+    artifact_file: str | None = None
 
     def improves(self, candidate: float, incumbent: float) -> bool:
         """Whether the candidate is better than the incumbent on this model's metric."""
@@ -62,6 +65,7 @@ CATALOGUE = (
         # scikit-learn documents no guarantee that a pickled estimator loads
         # correctly under another version, and the failure is silent.
         exact=frozenset({"scikit-learn"}),
+        artifact_file="credit_risk_model.joblib",
     ),
     RegisteredModel(
         name="irony",
