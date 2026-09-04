@@ -72,21 +72,77 @@ reports accuracy and ROC-AUC, and neither is what the decision is worth.
 A tie is not an improvement. A candidate equal to the incumbent is a redeploy with
 no measured reason behind it, so the gate declines it.
 
+## Promotion gate
+
+The comparison a gate exists to make is only meaningful when both numbers describe
+the same thing, so the gate establishes that before it compares anything, and
+refuses rather than guesses when it cannot.
+
+| Condition | Outcome |
+|---|---|
+| The candidate reports a metric the model does not promote on | Held |
+| The candidate does not clear the model's floor | Held |
+| Nothing is in production | Promoted |
+| The two were measured on different held-out data | Held, as incomparable |
+| The candidate does not improve on the incumbent | Held |
+| The candidate improves on the incumbent, on the same data | Promoted |
+
+The fourth row is what separates a gate from a comparison of two numbers. A
+candidate scored on data the incumbent was never scored against is unjudged, and
+the answer is to score the incumbent on that data rather than to promote on an
+incomparable pair. The refusal names the two digests that differed.
+
+A tie is held. The floor is checked before the incumbent, so a candidate can beat a
+bad incumbent and still not be worth serving.
+
+```bash
+python -m registry.promote --model credit-risk --value 312 \
+    --dataset "$HOLDOUT_DIGEST" --revision "$ARTIFACT_COMMIT" --apply
+```
+
+Exit status is the answer: 0 promotes, 1 holds. That is what lets a workflow step
+fail on a candidate that is not an improvement without the workflow having to
+understand the metric or read the registry. The reason is also written to the run
+summary. Without `--apply` the gate decides and writes nothing, which is what a
+pull request wants.
+
+## Registry
+
+A version records where its artifact is, the score that justified it, the held-out
+data that score was measured on, and the library versions it was written under.
+Those travel as tags on the version rather than only on the run that produced it,
+so asking what is in production and on what evidence is one lookup.
+
+Production is an alias rather than a stage. MLflow 3 replaced stages with aliases,
+and an alias is the better fit regardless: it points at exactly one version, and
+moving it is the whole of a promotion.
+
+A version's source pins the artifact commit rather than naming the branch, so the
+version identifies the bytes that were scored and not whatever the branch points at
+afterwards.
+
+The candidate is registered whichever way the gate decides. A refused version stays
+in the registry carrying the score that refused it, which is the record of what was
+tried.
+
 ## Development
 
 ```bash
 python -m venv venv && source venv/bin/activate
 pip install -r requirements-dev.txt   # installs this package, which registers the scheme
 
-pytest              # 35 tests, offline
+pytest              # 69 tests, offline
 ruff check .
 ```
 
-No test reaches the network or a database. The hub client is replaced by a double
-that records what would have been uploaded and answers listings from a tree held in
-the test, and the installed-version lookup is replaced by a mapping, with one test
-that exercises the real lookup so the doubles cannot pass against code that never
-worked.
+No test reaches the network. The hub client is replaced by a double that records
+what would have been uploaded and answers listings from a tree held in the test,
+and the installed-version lookup is replaced by a mapping, with one test that
+exercises the real lookup so the doubles cannot pass against code that never worked.
+
+The registry and the gate command run against a real MLflow registry backed by a
+temporary SQLite file rather than against a double, so an API that moves under the
+project fails here rather than in deployment.
 
 ## Project structure
 
@@ -95,7 +151,10 @@ ML-Platform/
 ├── registry/
 │   ├── hf_artifacts.py   # MLflow artifact backend over Hugging Face repositories
 │   ├── environment.py    # What wrote an artifact, and whether this process may read it
-│   └── models.py         # The catalogue, and the terms of a promotion
+│   ├── models.py         # The catalogue, and the terms of a promotion
+│   ├── gate.py           # Whether a candidate replaces the model in production
+│   ├── store.py          # Model versions, their evidence, and the production alias
+│   └── promote.py        # The command a training pipeline calls, and its exit status
 ├── tests/                # pytest suite, offline
 └── pyproject.toml        # The entry point MLflow discovers the backend through
 ```
