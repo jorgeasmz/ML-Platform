@@ -129,7 +129,7 @@ tried.
 
 | Component | Host | |
 |---|---|---|
-| Tracking server and registry | Render | private, see below |
+| Tracking server and registry | Render | [ml-platform-registry.onrender.com](https://ml-platform-registry.onrender.com), credentialed |
 | Runs, versions and auth users | Neon, PostgreSQL | |
 | Artifacts | Hugging Face | one model repository per model |
 
@@ -140,7 +140,9 @@ the instance carries metadata only.
 ### Access
 
 The server requires a credential on every route but `/health`, which is exempt and
-is what the platform's own health check reaches.
+is what the platform's own health check reaches. Measured against the deployment,
+`/health` answers 200 unauthenticated while `/` and the registry API answer 401
+with `WWW-Authenticate: Basic realm="mlflow"`.
 
 It is not published with a browse credential. MLflow's basic auth gates reading and
 editing a resource, but creation is ungated: with workspaces disabled, which is the
