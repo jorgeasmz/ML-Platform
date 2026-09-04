@@ -9,6 +9,11 @@ dependencies = [
     "psycopg[binary]==3.3.4",
 ]
 
+# Only the tracking server needs these. A client that reads the registry or runs the
+# gate does not, and its install stays smaller without them.
+[project.optional-dependencies]
+server = ["mlflow[auth]==3.16.0"]
+
 # MLflow discovers artifact backends by URI scheme through this group, which is why
 # the package is installed rather than merely importable. Without the install, an
 # hf:// artifact root resolves to nothing and MLflow reports an unsupported scheme.

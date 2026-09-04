@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: ml-platform-registry
+    runtime: python
+    plan: free
+    # The server extra pulls the basic auth dependencies. The gate and the clients
+    # do not need them and install the package without it.
+    buildCommand: pip install ".[server]"
+    startCommand: bash deploy/start.sh
+    # Exempt from authentication, unlike every other route, which is what lets the
+    # platform's own health check reach it without a credential.
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12"
+      # Runs, metrics, model versions and the auth users all live in one Neon
+      # database. Their tables do not collide.
+      - key: MLFLOW_BACKEND_URI
+        sync: false
+      - key: MLFLOW_ADMIN_USERNAME
+        sync: false
+      - key: MLFLOW_ADMIN_PASSWORD
+        sync: false
+      # Stable across restarts. A key that changed on each deploy would invalidate
+      # every session and every CSRF token issued before it.
+      - key: MLFLOW_FLASK_SERVER_SECRET_KEY
+        sync: false
