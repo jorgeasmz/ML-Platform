@@ -152,18 +152,42 @@ MLflow reads its auth configuration with `configparser` and expands no environme
 variables in it, so `deploy/start.sh` writes the file at start-up from the
 environment rather than committing an administrator password to the repository.
 
+### Connection
+
+`MLFLOW_BACKEND_URI` names the driver and points at the direct endpoint:
+
+```
+postgresql+psycopg://user:password@ep-xxxx.region.aws.neon.tech/neondb?sslmode=require
+```
+
+Both halves of that are checked at start-up, because both fail late and unhelpfully
+otherwise. SQLAlchemy resolves a bare `postgresql://` to psycopg2, which this
+project does not install, so the server would start and die looking for it. And the
+server runs `CREATE TABLE` and Alembic migrations on start-up, which a pooler in
+transaction mode may spread across different backends; the connection count that
+would justify a pooler does not arise at one worker.
+
 ### Sizing
 
-| | |
-|---|---:|
-| Resident, one worker, idle | 256 MB |
-| Resident after 80 requests | 256 MB |
-| Summed PSS across the process tree | 195 MB |
-| Plan allows | 512 MB |
+The server starts a job subsystem with a process pool and two periodic tasks,
+online scoring and trace archival. This platform uses neither, and the pool is
+what decides whether the instance fits.
 
-Memory is flat under load, since the server holds metadata and streams nothing.
-One worker is what ships: two would put the pair close enough to the limit that
-whether the instance survives is decided by chance rather than by measurement.
+| `MLFLOW_SERVER_ENABLE_JOB_EXECUTION` | Processes over 20 MB | Summed PSS |
+|---|---:|---:|
+| `true`, the default | 10 | 1,758 MB |
+| **`false`** | **2** | **379 MB** |
+
+Measured over the whole process tree, since the pool is forked and neither its
+processes nor their memory appear in the parent.
+
+379 MB against the 512 MB the plan allows is modest headroom rather than
+comfortable, and it is what the free tier permits. One worker is what ships: a
+second would put the pair past the limit.
+
+The figure to measure is the tree, not the process. A count taken from the
+processes whose command line matches the server misses everything forked from it,
+and reports 195 MB for a deployment that is killed during start-up.
 
 The free plan sleeps an idle instance, so the first request after a quiet period
 pays the start-up. Nothing on the critical path of a deployment depends on the
