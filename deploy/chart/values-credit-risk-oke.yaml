@@ -9,13 +9,20 @@ image:
   # An immutable tag naming one build. IfNotPresent is safe against it and unsafe
   # against a tag that moves, which is why the image workflow publishes both and
   # this file names the one that does not.
-  tag: sha-REPLACE-WITH-THE-BUILD
+  tag: sha-3491cf8f4a85
   pullPolicy: IfNotPresent
 
 service:
   # Always Free includes one flexible load balancer at 10 Mbps, which is what puts
   # a public address in front of the service.
   type: LoadBalancer
+  annotations:
+    # Without these the provider creates its default shape, which is not the free
+    # one and bills from the first hour. The minimum and maximum are both 10 so
+    # the shape cannot scale itself out of the free tier under load.
+    service.beta.kubernetes.io/oci-load-balancer-shape: flexible
+    service.beta.kubernetes.io/oci-load-balancer-shape-flex-min: "10"
+    service.beta.kubernetes.io/oci-load-balancer-shape-flex-max: "10"
 
 # Two OCPUs and 12 GB across the whole tenancy, minus what the node itself takes.
 # The request is deliberately below what Render's 512 MB plan gives it, so a second

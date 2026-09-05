@@ -3,6 +3,11 @@ kind: Service
 metadata:
   name: {{ include "model-service.name" . }}
   labels: {{- include "model-service.labels" . | nindent 4 }}
+  {{- with .Values.service.annotations }}
+  # How a cloud provider is told what kind of load balancer to create. Left empty
+  # under kind, where the Service is a ClusterIP and nothing is provisioned.
+  annotations: {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
   type: {{ .Values.service.type }}
   selector: {{- include "model-service.selector" . | nindent 4 }}

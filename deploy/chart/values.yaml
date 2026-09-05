@@ -16,6 +16,9 @@ service:
   # ClusterIP under kind, where a test port-forwards. LoadBalancer on a cluster
   # with one, which is what puts a public address in front of it.
   type: ClusterIP
+  # A provider reads these to decide what it provisions. The default shape is
+  # rarely the free one, so the values file for a cluster names it.
+  annotations: {}
 
 # The service is known to run within 512 MB, which is what the free tier it is
 # deployed on allows. The request is what the scheduler reserves and the limit is
