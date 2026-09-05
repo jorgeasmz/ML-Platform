@@ -12,6 +12,12 @@ image:
 replicas: 1
 port: 8000
 
+# How long a terminating pod keeps answering while its removal from the Service
+# propagates. The grace period is this plus enough for the requests in flight.
+# Zero disables the pause, which is how the measurement in the chart's comment
+# was taken.
+drainSeconds: 5
+
 service:
   # ClusterIP under kind, where a test port-forwards. LoadBalancer on a cluster
   # with one, which is what puts a public address in front of it.

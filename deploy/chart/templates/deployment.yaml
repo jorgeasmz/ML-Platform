@@ -42,3 +42,17 @@ spec:
             periodSeconds: 10
             failureThreshold: 6
           resources: {{- toYaml .Values.resources | nindent 12 }}
+          # Kubernetes sends SIGTERM and removes the pod from the Service's
+          # endpoints at the same time, and the second takes a moment to reach
+          # every node. This pause keeps the pod answering while that propagates.
+          #
+          # Measured both ways on one node: a rolling update dropped nothing with
+          # it and nothing without it, so it is not what makes that test pass
+          # here. It is kept because the window it covers widens with the number
+          # of nodes the change has to reach, which is the case the single-node
+          # test cannot produce, and five seconds per removal costs nothing.
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sleep", "{{ .Values.drainSeconds }}"]
+      terminationGracePeriodSeconds: {{ add .Values.drainSeconds 25 }}
