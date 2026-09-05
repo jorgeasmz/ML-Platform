@@ -21,13 +21,13 @@ jobs:
       RELEASE: credit-risk
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       # The workload is the service that serves a promoted model. Testing the
       # chart against a stand-in would prove the templates render, which the lint
       # already does, and nothing about whether the thing starts.
       - name: Check out the service this chart deploys
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           repository: jorgeasmz/Credit-Risk-Assessment
           path: service
