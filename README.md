@@ -282,19 +282,6 @@ has to reach, which is the case a single-node cluster cannot produce. Reporting 
 as the reason the test passes would be reporting something the measurement does
 not show.
 
-### What no cluster does
-
-No cluster serves public traffic, and none is planned. There is no managed
-Kubernetes on a free tier without a card; the one provider whose free tier
-includes it had no Ampere capacity in the region, and its terms reclaim an idle
-instance after seven days below 20% utilisation, which is the exact profile of a
-portfolio demo nobody visits. A dead URL is worse than an absent one.
-
-What is lost with it is a public address served from Kubernetes and anything
-about running a cluster over weeks: node upgrades, resource pressure, certificate
-rotation. What is kept is every property above, asserted on every change to the
-manifests.
-
 ## Development
 
 ```bash
