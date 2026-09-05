@@ -1,4 +1,6 @@
 -e .[server]
+# The suite pins exactly; the package does not. See pyproject.
+mlflow==3.16.0
 pytest==9.1.1
 pytest-cov==7.1.0
 ruff==0.16.4

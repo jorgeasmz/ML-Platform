@@ -7,9 +7,14 @@ requires-python = ">=3.12"
 # the registry and run the gate, and pulling the server with it would drag its own
 # pins into the environment whose library versions the record is supposed to
 # capture.
+#
+# Ranges rather than exact pins, because this is a library. A project that pins
+# mlflow itself could not install a library that pins a different patch of it, and
+# the projects are the ones that need an exact version for a reproducible run. The
+# floor is the oldest release the suite is run against.
 dependencies = [
-    "mlflow-skinny==3.16.0",
-    "huggingface-hub==1.30.0",
+    "mlflow-skinny>=3.15,<4",
+    "huggingface-hub>=1.28,<2",
 ]
 
 # The tracking server, its basic auth, and the driver it reaches PostgreSQL with.
