@@ -265,8 +265,35 @@ the gate scored it, and the autoscaler reports `cpu: 29%/70%` rather than
 `<unknown>`, which is the difference between an autoscaler that exists and one
 that reads its target.
 
-No cluster serves public traffic yet. The public demo runs on Render, and the
-manifests are applied and exercised on every change to them.
+### Behaviour under change and under load
+
+Starting is not operating. Two more questions are asked of the same cluster, and
+both fail the job when the answer is wrong.
+
+| Property | Measured |
+|---|---|
+| The autoscaler adds a replica under load | 1 to 2 replicas after 50 s, at 110% of the 70% target |
+| A rolling update drops nothing | 14,614 requests through a full pod replacement, 0 failed |
+
+The second was also measured with the drain pause disabled, and dropped nothing
+either: on one node the endpoint removal propagates before it matters. The pause
+is kept because the window it covers widens with the number of nodes the change
+has to reach, which is the case a single-node cluster cannot produce. Reporting it
+as the reason the test passes would be reporting something the measurement does
+not show.
+
+### What no cluster does
+
+No cluster serves public traffic, and none is planned. There is no managed
+Kubernetes on a free tier without a card; the one provider whose free tier
+includes it had no Ampere capacity in the region, and its terms reclaim an idle
+instance after seven days below 20% utilisation, which is the exact profile of a
+portfolio demo nobody visits. A dead URL is worse than an absent one.
+
+What is lost with it is a public address served from Kubernetes and anything
+about running a cluster over weeks: node upgrades, resource pressure, certificate
+rotation. What is kept is every property above, asserted on every change to the
+manifests.
 
 ## Development
 
@@ -274,7 +301,7 @@ manifests are applied and exercised on every change to them.
 python -m venv venv && source venv/bin/activate
 pip install -r requirements-dev.txt   # installs this package, which registers the scheme
 
-pytest              # 90 tests, offline
+pytest              # 116 tests, offline
 ruff check .
 ```
 
