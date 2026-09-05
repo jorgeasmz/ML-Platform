@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import sys
 
 from mlflow import MlflowClient
@@ -48,8 +49,19 @@ def parse(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+COMMIT = re.compile(r"^[0-9a-f]{40}$")
+
+
 def run(arguments: argparse.Namespace, client: MlflowClient) -> Decision:
     model = get(arguments.model)
+    # A shell substitution that fails yields an empty string rather than stopping
+    # the command, so an unusable revision arrives here looking like an argument.
+    # A version whose source pins no commit identifies no bytes and must not exist.
+    if not COMMIT.match(arguments.revision or ""):
+        raise ValueError(
+            f"--revision must be a 40 character commit, not {arguments.revision!r}. "
+            "A version that pins no commit cannot be resolved back to an artifact."
+        )
     candidate = Measurement(
         version=arguments.revision,
         metric=model.metric,

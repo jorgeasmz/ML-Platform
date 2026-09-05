@@ -131,3 +131,12 @@ def test_no_summary_is_written_outside_a_workflow(monkeypatch, client):
     monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
 
     summarise(run(arguments(), client), MODEL)
+
+
+@pytest.mark.parametrize("revision", ["", "not-a-commit", "77583b46"])
+def test_a_revision_that_is_not_a_commit_is_refused(client, revision):
+    """A failed shell substitution arrives as an empty string, not as an error."""
+    with pytest.raises(ValueError, match="must be a 40 character commit"):
+        run(arguments(revision=revision, apply=True), client)
+
+    assert client.search_model_versions(f"name='{MODEL}'") == []
