@@ -102,6 +102,55 @@ jobs:
             exit 1
           fi
 
+      # Startup is not operation. These two ask what the deployment does under
+      # change and under load, which is what the manifests exist to control.
+      - name: The autoscaler scales under load
+        run: |
+          kubectl create job load --image=curlimages/curl:8.11.1 -- sh -c \
+            'end=$(( $(date +%s) + 240 )); while [ $(date +%s) -lt $end ]; do curl -s -o /dev/null http://'"$RELEASE"'/; done'
+
+          before=$(kubectl get deployment "$RELEASE" -o jsonpath='{.spec.replicas}')
+          scaled=""
+          for i in $(seq 1 40); do
+            now=$(kubectl get deployment "$RELEASE" -o jsonpath='{.spec.replicas}')
+            if [ "$now" -gt "$before" ]; then scaled=$now; break; fi
+            sleep 10
+          done
+          used=$(kubectl get hpa "$RELEASE" -o jsonpath='{.status.currentMetrics[0].resource.current.averageUtilization}' 2>/dev/null || true)
+          kubectl get hpa "$RELEASE"
+          kubectl delete job load --wait=false
+
+          if [ -z "$scaled" ]; then
+            echo "The autoscaler did not add a replica under load." >&2
+            exit 1
+          fi
+          echo "Scaled from $before to $scaled replicas at ${used}% of the target." \
+            >> "$GITHUB_STEP_SUMMARY"
+
+      - name: A rolling update drops nothing
+        run: |
+          kubectl create job probe --image=curlimages/curl:8.11.1 -- sh -c \
+            'ok=0; bad=0; end=$(( $(date +%s) + 100 ));
+             while [ $(date +%s) -lt $end ]; do
+               if curl -sf -m 5 -o /dev/null http://'"$RELEASE"'/; then ok=$((ok+1)); else bad=$((bad+1)); fi
+             done; echo "ok=$ok failed=$bad"'
+          sleep 15
+
+          helm upgrade "$RELEASE" deploy/chart -f deploy/chart/values-credit-risk.yaml \
+            --set-string env[1].name=ROLLOUT --set-string env[1].value="$GITHUB_RUN_ID" \
+            --wait --timeout 300s
+          kubectl rollout status "deployment/$RELEASE" --timeout=300s
+
+          kubectl wait --for=condition=complete job/probe --timeout=180s
+          result=$(kubectl logs job/probe | tail -1)
+          echo "$result"
+          echo "Through a full pod replacement: $result" >> "$GITHUB_STEP_SUMMARY"
+
+          case "$result" in
+            *"failed=0") ;;
+            *) echo "The rolling update dropped requests: $result" >&2; exit 1 ;;
+          esac
+
       - name: Report what ran
         if: always()
         run: |
