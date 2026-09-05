@@ -1,0 +1,41 @@
+# The credit risk service on Oracle Kubernetes Engine, where the cluster pulls the
+# image from a registry rather than having it loaded into the node.
+model: credit-risk
+
+image:
+  # Public, so the cluster needs no pull secret. Built for arm64: the free tier's
+  # only shape with enough memory to be a node is Ampere A1.
+  repository: ghcr.io/jorgeasmz/credit-risk-api
+  # An immutable tag naming one build. IfNotPresent is safe against it and unsafe
+  # against a tag that moves, which is why the image workflow publishes both and
+  # this file names the one that does not.
+  tag: sha-REPLACE-WITH-THE-BUILD
+  pullPolicy: IfNotPresent
+
+service:
+  # Always Free includes one flexible load balancer at 10 Mbps, which is what puts
+  # a public address in front of the service.
+  type: LoadBalancer
+
+# Two OCPUs and 12 GB across the whole tenancy, minus what the node itself takes.
+# The request is deliberately below what Render's 512 MB plan gives it, so a second
+# replica fits when the autoscaler asks for one.
+resources:
+  requests:
+    cpu: 200m
+    memory: 384Mi
+  limits:
+    memory: 768Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 2
+  targetCPUUtilizationPercentage: 70
+
+env:
+  - name: API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: credit-risk
+        key: api-key
